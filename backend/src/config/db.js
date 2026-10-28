@@ -20,7 +20,14 @@ process.env.MYSQL_USER ||= process.env.MYSQLUSER;
 process.env.MYSQL_PASSWORD ||= process.env.MYSQLPASSWORD;
 process.env.MYSQL_DATABASE ||= process.env.MYSQLDATABASE;
 
+// Cloud MySQL providers (Aiven, etc.) require encrypted connections. Set MYSQL_SSL=true to enable.
+const sslOptions =
+  String(process.env.MYSQL_SSL || "").toLowerCase() === "true"
+    ? { rejectUnauthorized: false }
+    : undefined;
+
 const pool = mysql.createPool({
+  ssl: sslOptions,
   host: process.env.MYSQL_HOST || "localhost",
   port: Number(process.env.MYSQL_PORT || 3306),
   user: process.env.MYSQL_USER || "root",
@@ -45,6 +52,7 @@ export async function initializeDatabase() {
     port,
     user,
     password,
+    ssl: sslOptions,
     multipleStatements: true
   });
 
