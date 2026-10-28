@@ -164,7 +164,7 @@ export default function CodeEditorPanel({
   const [verificationResult, setVerificationResult] = useState(null);
   const statusCopy = useMemo(() => {
     if (isOwner) {
-      return canGuestsEdit ? "Everyone can edit" : "Only you can edit";
+      return canGuestsEdit ? "Everyone can edit" : "Only you can edit. Use \"Allow guests to edit\" to let others.";
     }
 
     return canCurrentUserEdit ? "Editing enabled by owner" : "Read-only editor";
@@ -279,7 +279,7 @@ export default function CodeEditorPanel({
               onClick={() => onToggleGuestsEditing(!canGuestsEdit)}
             >
               {canGuestsEdit ? <FiCode /> : <FiSlash />}
-              <span>{canGuestsEdit ? "Guests can edit" : "Lock editing"}</span>
+              <span>{canGuestsEdit ? "Guests can edit (click to lock)" : "Allow guests to edit"}</span>
             </button>
           ) : null}
           {isOwner ? (

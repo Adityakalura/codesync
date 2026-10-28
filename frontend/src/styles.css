@@ -1410,3 +1410,15 @@ a {
     max-width: calc(100% - 36px);
   }
 }
+
+/* Make the owner's permission toggles easy to spot */
+.whiteboard-toggle:not(.active),
+.code-editor-toggle:not(.active) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.whiteboard-toggle.active,
+.code-editor-toggle.active {
+  border-color: var(--primary);
+}

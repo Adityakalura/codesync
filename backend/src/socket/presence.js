@@ -82,6 +82,37 @@ function canEditCode(presence) {
   return presence.user.id === presence.meetingOwnerId || codeEditor.canGuestsEdit;
 }
 
+function ackTo(ack, payload) {
+  if (typeof ack === "function") {
+    ack(payload);
+  }
+}
+
+function sendWhiteboardState(socket, presence) {
+  const whiteboard = getWhiteboard(presence.roomKey);
+  socket.emit("whiteboard:init", {
+    visible: whiteboard.visible,
+    strokes: whiteboard.strokes,
+    canGuestsDraw: whiteboard.canGuestsDraw,
+    ownerId: presence.meetingOwnerId
+  });
+}
+
+function sendCodeEditorState(socket, presence) {
+  const codeEditor = getCodeEditor(presence.roomKey);
+  socket.emit("code-editor:init", {
+    visible: codeEditor.visible,
+    canGuestsEdit: codeEditor.canGuestsEdit,
+    language: codeEditor.language,
+    content: codeEditor.content,
+    testCases: codeEditor.testCases,
+    validationScript: codeEditor.validationScript,
+    updatedAt: codeEditor.updatedAt,
+    updatedBy: codeEditor.updatedBy,
+    ownerId: presence.meetingOwnerId
+  });
+}
+
 function sameRoom(a, b) {
   const pa = socketToPresence.get(a);
   const pb = socketToPresence.get(b);
@@ -258,7 +289,11 @@ export function registerMeetingSocket(io, socket) {
 
   socket.on("meeting:sendMessage", ({ message }) => {
     const presence = socketToPresence.get(socket.id);
-    if (!presence || typeof message !== "string" || !message.trim()) {
+    if (!presence) {
+      socket.emit("meeting:rejoin-needed");
+      return;
+    }
+    if (typeof message !== "string" || !message.trim()) {
       return;
     }
 
@@ -297,9 +332,15 @@ export function registerMeetingSocket(io, socket) {
     });
   });
 
-  socket.on("whiteboard:permission", ({ canGuestsDraw }) => {
+  socket.on("whiteboard:permission", ({ canGuestsDraw }, ack) => {
     const presence = socketToPresence.get(socket.id);
-    if (!presence || presence.user.id !== presence.meetingOwnerId) {
+    if (!presence) {
+      socket.emit("meeting:rejoin-needed");
+      ackTo(ack, { ok: false, reason: "not-joined" });
+      return;
+    }
+    if (presence.user.id !== presence.meetingOwnerId) {
+      ackTo(ack, { ok: false, reason: "not-owner" });
       return;
     }
 
@@ -310,6 +351,7 @@ export function registerMeetingSocket(io, socket) {
       canGuestsDraw: whiteboard.canGuestsDraw,
       ownerId: presence.meetingOwnerId
     });
+    ackTo(ack, { ok: true });
   });
 
   socket.on("whiteboard:toggle-visible", ({ visible }) => {
@@ -379,9 +421,15 @@ export function registerMeetingSocket(io, socket) {
     });
   });
 
-  socket.on("code-editor:permission", ({ canGuestsEdit }) => {
+  socket.on("code-editor:permission", ({ canGuestsEdit }, ack) => {
     const presence = socketToPresence.get(socket.id);
-    if (!presence || presence.user.id !== presence.meetingOwnerId) {
+    if (!presence) {
+      socket.emit("meeting:rejoin-needed");
+      ackTo(ack, { ok: false, reason: "not-joined" });
+      return;
+    }
+    if (presence.user.id !== presence.meetingOwnerId) {
+      ackTo(ack, { ok: false, reason: "not-owner" });
       return;
     }
 
@@ -392,6 +440,7 @@ export function registerMeetingSocket(io, socket) {
       canGuestsEdit: codeEditor.canGuestsEdit,
       ownerId: presence.meetingOwnerId
     });
+    ackTo(ack, { ok: true });
   });
 
   socket.on("code-editor:toggle-visible", ({ visible }) => {
@@ -487,7 +536,13 @@ export function registerMeetingSocket(io, socket) {
 
   socket.on("code-editor:update", ({ content, language }) => {
     const presence = socketToPresence.get(socket.id);
+    if (!presence) {
+      socket.emit("meeting:rejoin-needed");
+      return;
+    }
     if (!canEditCode(presence)) {
+      socket.emit("meeting:denied", { action: "edit the code" });
+      sendCodeEditorState(socket, presence);
       return;
     }
 
@@ -548,7 +603,15 @@ export function registerMeetingSocket(io, socket) {
 
   socket.on("whiteboard:stroke-start", ({ stroke }) => {
     const presence = socketToPresence.get(socket.id);
+    if (!presence) {
+      socket.emit("meeting:rejoin-needed");
+      return;
+    }
     if (!canDraw(presence) || !stroke?.id) {
+      if (!canDraw(presence)) {
+        socket.emit("meeting:denied", { action: "draw on the whiteboard" });
+        sendWhiteboardState(socket, presence);
+      }
       return;
     }
 

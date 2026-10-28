@@ -47,6 +47,7 @@ export default function MeetingRoomPage() {
   const pendingIceCandidatesRef = useRef(new Map());
   const localStreamRef = useRef(null);
   const joinedRoomRef = useRef(false);
+  const joinedSocketIdRef = useRef(null);
   const isOwner = meeting?.owner.id === user?.id;
   const canCurrentUserDraw = isOwner || canGuestsDraw;
   const canCurrentUserEditCode = isOwner || canGuestsEditCode;
@@ -557,14 +558,45 @@ export default function MeetingRoomPage() {
     socket.on("code-editor:update", handleCodeEditorUpdate);
     socket.on("code-editor:test-config", handleCodeEditorTestConfig);
 
-    if (!joinedRoomRef.current) {
-      socket.emit("meeting:join", { identifier: meeting.roomSlug, user, sessionId });
+    // Join now, and again after any reconnect (the server forgets us when a connection drops).
+    const sendJoin = () => {
+      if (!socket.connected || joinedSocketIdRef.current === socket.id) {
+        return;
+      }
+
+      joinedSocketIdRef.current = socket.id;
       joinedRoomRef.current = true;
-    }
+      socket.emit("meeting:join", { identifier: meeting.roomSlug, user, sessionId });
+    };
+
+    const handleRejoinNeeded = () => {
+      joinedSocketIdRef.current = null;
+      sendJoin();
+    };
+
+    const handleDenied = ({ action }) => {
+      setNotifications((current) => [
+        {
+          id: "denied-action",
+          title: "Not allowed",
+          message: `Only the owner can ${action} right now. Ask them to allow guests.`
+        },
+        ...current.filter((item) => item.id !== "denied-action")
+      ]);
+    };
+
+    socket.on("connect", sendJoin);
+    socket.on("meeting:rejoin-needed", handleRejoinNeeded);
+    socket.on("meeting:denied", handleDenied);
+    sendJoin();
 
     return () => {
       socket.emit("meeting:leave");
       joinedRoomRef.current = false;
+      joinedSocketIdRef.current = null;
+      socket.off("connect", sendJoin);
+      socket.off("meeting:rejoin-needed", handleRejoinNeeded);
+      socket.off("meeting:denied", handleDenied);
       socket.off("meeting:roster", handleRoster);
       socket.off("meeting:chat", handleChat);
       socket.off("meeting:ownerPrompt", handleOwnerPrompt);
@@ -660,16 +692,33 @@ export default function MeetingRoomPage() {
     navigate("/dashboard");
   }
 
+  function notifyPermissionFailed() {
+    setNotifications((current) => [
+      {
+        id: `permission-failed-${Date.now()}`,
+        title: "Permission not changed",
+        message: "Connection to the meeting was interrupted. Reconnecting; please click again in a moment."
+      },
+      ...current
+    ]);
+  }
+
   function handleWhiteboardPermissionChange(nextValue) {
     const socket = getSocket();
-    socket.emit("whiteboard:permission", { canGuestsDraw: nextValue });
-    setCanGuestsDraw(nextValue);
+    socket.emit("whiteboard:permission", { canGuestsDraw: nextValue }, (result) => {
+      if (!result?.ok) {
+        notifyPermissionFailed();
+      }
+    });
   }
 
   function handleCodeEditorPermissionChange(nextValue) {
     const socket = getSocket();
-    socket.emit("code-editor:permission", { canGuestsEdit: nextValue });
-    setCanGuestsEditCode(nextValue);
+    socket.emit("code-editor:permission", { canGuestsEdit: nextValue }, (result) => {
+      if (!result?.ok) {
+        notifyPermissionFailed();
+      }
+    });
   }
 
   function handleWhiteboardToggle() {

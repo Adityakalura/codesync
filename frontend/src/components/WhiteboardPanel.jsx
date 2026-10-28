@@ -52,7 +52,7 @@ export default function WhiteboardPanel({
 
   const statusCopy = useMemo(() => {
     if (isOwner) {
-      return canGuestsDraw ? "Everyone can draw" : "Only you can draw";
+      return canGuestsDraw ? "Everyone can draw" : "Only you can draw. Use \"Allow guests to draw\" to let others.";
     }
 
     return canCurrentUserDraw ? "Drawing enabled by owner" : "Read-only board";
@@ -154,7 +154,7 @@ export default function WhiteboardPanel({
               onClick={() => onToggleGuestsDrawing(!canGuestsDraw)}
             >
               {canGuestsDraw ? <FiEdit3 /> : <FiSlash />}
-              <span>{canGuestsDraw ? "Guests can draw" : "Lock drawing"}</span>
+              <span>{canGuestsDraw ? "Guests can draw (click to lock)" : "Allow guests to draw"}</span>
             </button>
           ) : null}
           {isOwner ? (
